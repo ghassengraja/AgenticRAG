@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 # pyrefly: ignore [missing-import]
 from django.utils import timezone
+from uuid import uuid4
 
 
 # Create your models here.
@@ -29,3 +30,18 @@ class Document(models.Model):
         else:
             self.active_at = None
         super().save(*args, **kwargs)
+
+
+class EpisodicMemory(models.Model):
+    """
+    Dynamic Read/Write Episodic Memory for the agent to store experiences and facts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    fact = models.CharField(max_length=500)
+    context = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.owner.username} Memory: {self.fact[:50]}"
