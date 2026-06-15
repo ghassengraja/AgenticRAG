@@ -16,7 +16,6 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -124,6 +123,14 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+from dotenv import load_dotenv
+import os
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+load_dotenv(BASE_DIR / ".env")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+PERMIT_API_KEY = os.getenv("PERMIT_API_KEY", "")
+PERMIT_PDP_URL = os.getenv("PERMIT_PDP_URL", "https://cloudservice.permit.io")
+
+REDIS_URI = os.getenv("REDIS_URI", "")

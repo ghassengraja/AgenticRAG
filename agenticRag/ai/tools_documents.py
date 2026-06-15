@@ -2,9 +2,11 @@ from importlib import metadata
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from documents.models import Document
-from mypermit import permit_client as permit
+import os
+import logging
+from permit import Permit
+from django.conf import settings
 from asgiref.sync import async_to_sync
-from django.db.models import Q
 
 
 def _get_user_document(document_id, user_id, active_only=True):
