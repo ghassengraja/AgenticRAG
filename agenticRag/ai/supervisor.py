@@ -1,8 +1,6 @@
 from langgraph_supervisor import create_supervisor
 from ai.llm import get_model
 from ai.agents import get_document_agent, get_memory_agent, rag_document_agent
-from langgraph.graph import StateGraph, START, END, MessagesState
-from django.contrib.auth import get_user_model
 from langsmith import traceable
 from short_term_mem import saver as checkpointer
 
@@ -10,7 +8,7 @@ def get_supervisor(model = None, checkpointer=checkpointer):
     model = get_model()
     document_agent = get_document_agent(checkpointer=checkpointer)
     memory_agent = get_memory_agent(checkpointer=checkpointer)
-    rag_agent = rag_document_agent()
+    rag_agent = rag_document_agent(checkpointer=checkpointer)
     
     document_agent.name = "document_agent"
     memory_agent.name = "memory_agent"

@@ -7,7 +7,7 @@ from tools_retriever import retriever_tool
 from langchain_core.messages import SystemMessage
 from short_term_mem import saver as checkpointer
 
-def get_document_agent():
+def get_document_agent(checkpointer=None):
     model = get_model()
     agent = create_react_agent(
         model=model,
@@ -37,7 +37,7 @@ When instructed to save new facts from the recent conversation, you MUST follow 
     )
     return agent
 
-def rag_document_agent():
+def rag_document_agent(checkpointer=None):
     model = get_model() # Must use Chat LLM, not embeddings model
     agent = create_react_agent(
         model=model,

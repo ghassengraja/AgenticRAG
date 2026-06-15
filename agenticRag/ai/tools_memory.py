@@ -71,18 +71,26 @@ def add_episodic_memory(fact: str, context: str, config: RunnableConfig = None):
             fact=fact,
             context=context
         )
+        
+        vectorstore = get_vectorstore()
+        vectorstore.add_texts(
+            texts=[fact],
+            metadatas=[{"id": str(memory.id), "owner_id": str(user_id)}],
+            ids=[str(memory.id)]
+        )
+        
         return f"Successfully saved NEW memory ID {memory.id}."
     except Exception as e:
         return f"Failed to save memory: {str(e)}"
 
 @tool
-def update_episodic_memory(memory_id: int, fact: str, context: str, config: RunnableConfig = None):
+def update_episodic_memory(memory_id: str, fact: str, context: str, config: RunnableConfig = None):
     """
     Update an existing memory with new information.
     Use this when a previously saved fact has changed or needs more context.
     
     Arguments:
-    memory_id: The integer ID of the memory to update (obtained from search_episodic_memory).
+    memory_id: The UUID string of the memory to update (obtained from search_episodic_memory).
     fact: The updated concise statement of the fact.
     context: The updated detailed context.
     """
@@ -98,6 +106,18 @@ def update_episodic_memory(memory_id: int, fact: str, context: str, config: Runn
         memory.fact = fact
         memory.context = context
         memory.save()
+        
+        vectorstore = get_vectorstore()
+        try:
+            vectorstore.delete(ids=[str(memory.id)])
+        except Exception:
+            pass
+        vectorstore.add_texts(
+            texts=[fact],
+            metadatas=[{"id": str(memory.id), "owner_id": str(user_id)}],
+            ids=[str(memory.id)]
+        )
+        
         return f"Successfully UPDATED memory ID {memory.id}."
     except EpisodicMemory.DoesNotExist:
         return f"Memory ID {memory_id} not found."
@@ -105,13 +125,13 @@ def update_episodic_memory(memory_id: int, fact: str, context: str, config: Runn
         return f"Failed to update memory: {str(e)}"
 
 @tool
-def delete_episodic_memory(memory_id: int, config: RunnableConfig = None):
+def delete_episodic_memory(memory_id: str, config: RunnableConfig = None):
     """
     Delete an existing memory.
     Use this when a previously saved fact is no longer true, directly contradicted, or completely irrelevant.
     
     Arguments:
-    memory_id: The integer ID of the memory to delete (obtained from search_episodic_memory).
+    memory_id: The UUID string of the memory to delete (obtained from search_episodic_memory).
     """
     config = config or {}
     configurable = config.get('configurable') or config.get('metadata') or {}
@@ -123,6 +143,13 @@ def delete_episodic_memory(memory_id: int, config: RunnableConfig = None):
     try:
         memory = EpisodicMemory.objects.get(id=memory_id, owner_id=user_id)
         memory.delete()
+        
+        vectorstore = get_vectorstore()
+        try:
+            vectorstore.delete(ids=[str(memory_id)])
+        except Exception:
+            pass
+            
         return f"Successfully DELETED memory ID {memory_id}."
     except EpisodicMemory.DoesNotExist:
         return f"Memory ID {memory_id} not found."

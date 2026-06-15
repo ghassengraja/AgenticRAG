@@ -15,7 +15,7 @@ graph TD
     Supervisor -->|Recall/Save Preferences| MemAgent[Memory Agent]
     
     DocAgent -->|Read Document Data| SQLite[(SQLite DB)]
-    RAGAgent -->|Search PDFs| ChromaStock[(ChromaDB: stock_market)]
+    RAGAgent -->|Search PDFs| ChromaDocs[(ChromaDB: docs)]
     MemAgent -->|Search & Update| ChromaMem[(ChromaDB: episodic_memory)]
 ```
 
