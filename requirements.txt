@@ -1,5 +1,6 @@
 Django>=5.0,<6.0
 jupyter
 langgraph
+langchain-openai
 python-decouple
 permit

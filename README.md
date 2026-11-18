@@ -52,15 +52,9 @@ The system utilizes two isolated ChromaDB vector stores, embedded via Gemini:
 
 ## ⚙️ Environment Setup
 
-To run the application, configure your `.env` file at the root of the project with the following keys:
+Configure the vLLM endpoint and model with `VLLM_BASE_URL` and `VLLM_MODEL` in `agenticRag/.env`, next to `manage.py`.
 
-```dotenv
-# Google API (For Embeddings)
-GOOGLE_API_KEY="your-google-api-key"
-
-# LLM Provider (OpenRouter/Gemma)
-OPENROUTER_API_KEY="your-openrouter-api-key"
-```
+PDF retrieval and episodic memory still use Google embeddings. Set `GOOGLE_API_KEY` in the process environment or in `agenticRag/.env` to use those features.
 
 *Ensure a local Redis server is running on port `6379` via Docker:*
 ```bash
@@ -77,7 +71,7 @@ agentic_rag/
 │   ├── ai/
 │   │   ├── agents.py                 # Document, Memory, and RAG agents setup
 │   │   ├── supervisor.py             # LangGraph Supervisor implementation
-│   │   ├── llm.py                    # LLM OpenRouter & Embedding configuration
+│   │   ├── llm.py                    # vLLM chat model and embedding configuration
 │   │   ├── vectorstore.py            # ChromaDB episodic memory setup
 │   │   ├── retriever.py              # PDF chunking and ChromaDB knowledge base setup
 │   │   ├── tools_documents.py        # Tools for searching and reading user documents

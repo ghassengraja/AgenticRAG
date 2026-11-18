@@ -128,9 +128,9 @@ import os
 
 load_dotenv(BASE_DIR / ".env")
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL")
+VLLM_MODEL = os.getenv("VLLM_MODEL")
 PERMIT_API_KEY = os.getenv("PERMIT_API_KEY", "")
-PERMIT_PDP_URL = os.getenv("PERMIT_PDP_URL", "https://cloudservice.permit.io")
+PERMIT_PDP_URL = os.getenv("PERMIT_PDP_URL")
 
 REDIS_URI = os.getenv("REDIS_URI", "")
