@@ -5,7 +5,6 @@ from .tools_documents import document_tools
 from .tools_memory import memory_tools
 from .tools_retriever import retriever_tool
 from langchain_core.messages import SystemMessage
-from .short_term_mem import saver as checkpointer
 
 def get_document_agent(checkpointer=None):
     model = get_model()

@@ -2,9 +2,14 @@ from langgraph_supervisor import create_supervisor
 from ai.llm import get_model
 from ai.agents import get_document_agent, get_memory_agent, rag_document_agent
 from langsmith import traceable
-from .short_term_mem import saver as checkpointer
+from .short_term_mem import get_checkpointer
 
-def get_supervisor(model = None, checkpointer=checkpointer):
+_DEFAULT_CHECKPOINTER = object()
+
+
+def get_supervisor(model=None, checkpointer=_DEFAULT_CHECKPOINTER):
+    if checkpointer is _DEFAULT_CHECKPOINTER:
+        checkpointer = get_checkpointer()
     model = get_model()
     document_agent = get_document_agent(checkpointer=checkpointer)
     memory_agent = get_memory_agent(checkpointer=checkpointer)

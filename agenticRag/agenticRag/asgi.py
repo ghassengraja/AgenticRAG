@@ -11,6 +11,9 @@ import os
 
 from django.core.asgi import get_asgi_application
 
+from ai.short_term_mem import get_checkpointer
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'agenticRag.settings')
 
 application = get_asgi_application()
+get_checkpointer()

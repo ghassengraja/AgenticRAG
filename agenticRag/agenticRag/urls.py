@@ -36,8 +36,8 @@ from . import api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('v1/session', api.session),
     path('v1/chat/completions', api.chat_completions),
     path('v1/models', api.get_models),
     path('v1/', api.v1_health),
-    path('v1', api.v1_health),
 ]

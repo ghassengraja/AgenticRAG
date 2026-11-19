@@ -1,158 +1,194 @@
 import json
+import logging
 import time
 from uuid import uuid4
+
+from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import get_user_model
+from django.middleware.csrf import get_token
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_http_methods, require_POST, require_safe
+from langchain_core.callbacks import UsageMetadataCallbackHandler
+from langchain_core.messages import AIMessage, convert_to_messages
+
 from ai.supervisor import get_supervisor
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-User = get_user_model()
 
-@csrf_exempt
+logger = logging.getLogger(__name__)
+MODEL_ID = "agentic-rag"
+MODEL_CREATED = 1781520976  # The first commit that advertised this model ID.
+CHAT_ROLES = ("user", "assistant", "system", "developer")
+CHAT_FIELDS = {"model", "messages", "stream"}
+
+
+def chat_error(message, status=400, *, param=None, code=None, error_type="invalid_request_error"):
+    return JsonResponse({"error": {
+        "message": message,
+        "type": error_type,
+        "param": param,
+        "code": code,
+    }}, status=status)
+
+
+def is_text_content(content):
+    if isinstance(content, str):
+        return True
+    return isinstance(content, list) and bool(content) and all(
+        isinstance(part, dict)
+        and part.keys() == {"type", "text"}
+        and part.get("type") == "text"
+        and isinstance(part.get("text"), str)
+        for part in content
+    )
+
+
+@never_cache
+@require_http_methods(["GET", "POST", "DELETE"])
+def session(request):
+    """Read, create, or end a Django login session."""
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if not isinstance(data, dict):
+            return JsonResponse({"error": "Expected a JSON object"}, status=400)
+
+        username = data.get("username")
+        password = data.get("password")
+        if not isinstance(username, str) or not isinstance(password, str) or not username or not password:
+            return JsonResponse({"error": "Username and password are required"}, status=400)
+
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            return JsonResponse({"error": "Invalid username or password"}, status=401)
+        login(request, user)
+    elif request.method == "DELETE":
+        logout(request)
+
+    return JsonResponse({
+        "authenticated": request.user.is_authenticated,
+        "csrf_token": get_token(request),
+    })
+
+
+@require_POST
 def chat_completions(request):
-    """
-    OpenAI-compatible /v1/chat/completions endpoint.
-    Accepts JSON payload with `messages` and maps Authorization token to Django User.
-    """
-    if request.method != 'POST':
-        return JsonResponse({"status": "ok", "message": "Ready for POST requests"}, status=200)
-        
+    """Return a text chat completion for a signed-in Django user."""
+    user = request.user
+    if not user.is_authenticated:
+        return chat_error("Sign in to use chat completions", 401, error_type="authentication_error")
+
     try:
         data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-        
-    # 1. Authentication
-    # Expecting: Authorization: Bearer <username>
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return JsonResponse({"error": "Missing or invalid Authorization header. Use 'Bearer <username>'"}, status=401)
-        
-    token = auth_header.split(" ")[1]
-    
-    try:
-        user = User.objects.get(username=token)
-    except User.DoesNotExist:
-        return JsonResponse({"error": f"User with username '{token}' not found"}, status=401)
-        
-    # 2. Parse Messages
-    raw_messages = data.get("messages", [])
-    langchain_messages = []
-    
-    for msg in raw_messages:
-        role = msg.get("role")
-        content = msg.get("content")
-        if role == "user":
-            langchain_messages.append(HumanMessage(content=content))
-        elif role == "assistant":
-            langchain_messages.append(AIMessage(content=content))
-        elif role == "system":
-            langchain_messages.append(SystemMessage(content=content))
-            
-    if not langchain_messages:
-        return JsonResponse({"error": "No messages provided"}, status=400)
-        
-    # 3. Setup LangGraph Config
-    # We use a static thread_id per user so their conversation history is continuous in short term memory
-    thread_id = f"user_thread_{user.id}"
-    
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return chat_error("Invalid JSON")
+    if not isinstance(data, dict):
+        return chat_error("Expected a JSON object")
+
+    unsupported_field = next((field for field in data if field not in CHAT_FIELDS), None)
+    if unsupported_field is not None:
+        return chat_error("Unsupported chat parameter", param=unsupported_field)
+
+    model = data.get("model", MODEL_ID)
+    if not isinstance(model, str):
+        return chat_error("Model must be a string", param="model")
+    if model != MODEL_ID:
+        return chat_error(
+            f"Available model is '{MODEL_ID}'", 404, param="model", code="model_not_found"
+        )
+
+    stream = data.get("stream")
+    if stream is not None and not isinstance(stream, bool):
+        return chat_error("Stream must be a boolean", param="stream")
+    if stream:
+        return chat_error("Streaming is unavailable. Send stream=false or omit it.", param="stream")
+
+    raw_messages = data.get("messages")
+    if not isinstance(raw_messages, list) or not raw_messages:
+        return chat_error("Messages must be a non-empty array", param="messages")
+
+    messages = []
+    for index, message in enumerate(raw_messages):
+        param = f"messages[{index}]"
+        if not isinstance(message, dict):
+            return chat_error("Expected a message object", param=param)
+        role = message.get("role")
+        if role not in CHAT_ROLES:
+            return chat_error(
+                "Supported roles are user, assistant, system, and developer", param=f"{param}.role"
+            )
+        content = message.get("content")
+        if not is_text_content(content):
+            return chat_error("Content must be text or an array of text parts", param=f"{param}.content")
+        messages.append({"role": role, "content": content})
+
+    usage = UsageMetadataCallbackHandler()
     config = {
         "configurable": {
-            "thread_id": thread_id,
-            "user_id": user.id
-        }
+            "thread_id": f"user_thread_{user.id}",
+            "user_id": user.id,
+        },
+        "callbacks": [usage],
     }
-    
-    # 4. Invoke Supervisor
-    supervisor = get_supervisor()
     try:
-        # LangGraph MessagesState expects a dict with a "messages" key
-        result = supervisor.invoke({"messages": langchain_messages}, config=config)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-        
-    from django.http import StreamingHttpResponse
-    
-    # Extract the final AI message
+        supervisor = get_supervisor()
+        result = supervisor.invoke({"messages": convert_to_messages(messages)}, config=config)
+    except Exception:
+        logger.exception("Chat completion failed")
+        return chat_error("Chat completion failed", 500, error_type="server_error")
+
     final_messages = result.get("messages", [])
-    if final_messages:
-        last_message = final_messages[-1].content
-    else:
-        last_message = "No response generated."
-        
-    is_stream = data.get("stream", False)
-    
-    if is_stream:
-        def event_stream():
-            chunk = {
-                "id": f"chatcmpl-{uuid4()}",
-                "object": "chat.completion.chunk",
-                "created": int(time.time()),
-                "model": data.get("model", "agentic-rag-supervisor"),
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {
-                            "role": "assistant",
-                            "content": last_message
-                        },
-                        "finish_reason": "stop"
-                    }
-                ]
-            }
-            yield f"data: {json.dumps(chunk)}\n\n"
-            yield "data: [DONE]\n\n"
-            
-        return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-        
-    # 5. Format standard non-streaming OpenAI Response
+    answer = final_messages[-1] if final_messages else None
+    if not isinstance(answer, AIMessage) or answer.tool_calls or answer.invalid_tool_calls:
+        return chat_error("Supervisor did not return a final answer", 502, error_type="server_error")
+
+    finish_reason = answer.response_metadata.get("finish_reason")
+    if finish_reason not in ("stop", "length", "content_filter"):
+        finish_reason = "stop"
+
     response_data = {
         "id": f"chatcmpl-{uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": data.get("model", "agentic-rag-supervisor"),
+        "model": MODEL_ID,
         "choices": [
             {
                 "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": last_message
-                },
-                "finish_reason": "stop"
+                "message": {"role": "assistant", "content": answer.text},
+                "finish_reason": finish_reason,
             }
         ],
-        "usage": {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0
-        }
     }
-    
+    if usage.usage_metadata:
+        counts = usage.usage_metadata.values()
+        response_data["usage"] = {
+            "prompt_tokens": sum(count["input_tokens"] for count in counts),
+            "completion_tokens": sum(count["output_tokens"] for count in counts),
+            "total_tokens": sum(count["total_tokens"] for count in counts),
+        }
+
     return JsonResponse(response_data)
 
-@csrf_exempt
+
+@require_safe
 def get_models(request):
-    """
-    OpenAI-compatible /v1/models endpoint.
-    Used by frontends (like Open WebUI) to verify connection and list available models.
-    """
-    response_data = {
+    """Return the public model ID used by chat completions."""
+    return JsonResponse({
         "object": "list",
         "data": [
             {
-                "id": "agentic-rag",
+                "id": MODEL_ID,
                 "object": "model",
-                "created": int(time.time()),
-                "owned_by": "backend"
+                "created": MODEL_CREATED,
+                "owned_by": "backend",
             }
-        ]
-    }
-    return JsonResponse(response_data)
+        ],
+    })
 
-@csrf_exempt
+
+@require_safe
 def v1_health(request):
-    """
-    Health check for /v1 root endpoint.
-    """
+    """Return the Django API's health status."""
     return JsonResponse({"status": "ok", "message": "Agentic RAG API v1 is running"})

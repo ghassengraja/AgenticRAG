@@ -1,0 +1,29 @@
+[project]
+name = "agentic-rag"
+version = "0.1.0"
+description = "Django backend for agentic document search and memory"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asgiref",
+    "django>=5.0,<6.0",
+    "langchain-chroma",
+    "langchain-community",
+    "langchain-core",
+    "langchain-openai",
+    "langchain-text-splitters",
+    "langgraph",
+    "langgraph-checkpoint-redis>=0.6.0",
+    "langgraph-supervisor",
+    "langsmith",
+    "permit",
+    "pypdf",
+    "python-decouple",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = ["jupyter"]
+
+[tool.uv]
+package = false
